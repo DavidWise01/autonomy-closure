@@ -1,0 +1,14 @@
+{
+  "name": "autonomy_closure_321",
+  "version": "1.0.0",
+  "signature": "3 -> 2 -> 1",
+  "core_law": "no output observed means no trust assigned",
+  "problem_solved": "autonomy requires witnessed closure, not one-body counters",
+  "signal_model": {
+    "1": "counter only, not trusted",
+    "2": "sender/receiver agreement",
+    "3": "sender + receiver + independent witness",
+    "closure": "3 signals compress to 1 trusted event"
+  },
+  "invalid_signal": "no-reply counter without observed output"
+}

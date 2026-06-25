@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Autonomy Closure 3-2-1</title>
+<style>
+:root{
+ --bg:#02030a;--ink:#edfaff;--cyan:#67e8f9;--mint:#86efac;--gold:#facc15;--rose:#fb7185;--violet:#c084fc;
+ --grid:rgba(103,232,249,.05)
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#000;color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+body{
+ padding:18px;
+ background:
+ radial-gradient(circle at 50% 42%,rgba(103,232,249,.14),transparent 30%),
+ radial-gradient(circle at 20% 20%,rgba(192,132,252,.10),transparent 24%),
+ linear-gradient(var(--grid) 1px,transparent 1px),
+ linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+ var(--bg);
+ background-size:100% 100%,100% 100%,28px 28px,28px 28px;
+}
+.app{max-width:1500px;margin:0 auto;border:1px solid rgba(103,232,249,.24);border-radius:28px;background:rgba(0,0,0,.43);overflow:hidden;box-shadow:0 34px 120px rgba(0,0,0,.82)}
+header{padding:26px;border-bottom:1px solid rgba(103,232,249,.18);display:flex;justify-content:space-between;gap:20px;align-items:flex-end}
+h1{margin:0;font-size:clamp(38px,8vw,100px);font-weight:300;letter-spacing:.06em;text-shadow:0 0 34px rgba(103,232,249,.28)}
+.sub{font-size:12px;color:#a6dbe8;text-align:right;line-height:1.55}
+.grid{display:grid;grid-template-columns:360px 1fr 390px;gap:16px;padding:16px}
+@media(max-width:1120px){.grid{grid-template-columns:1fr}.stage{height:780px}.sub{text-align:left}}
+.box{border:1px solid rgba(103,232,249,.22);border-radius:20px;background:rgba(0,0,0,.52);padding:16px}
+.stage{height:780px;border:1px solid rgba(103,232,249,.22);border-radius:20px;overflow:hidden;position:relative;background:rgba(0,0,0,.25)}
+canvas{width:100%;height:100%;display:block}
+button,input{width:100%;border:1px solid rgba(103,232,249,.36);background:rgba(0,0,0,.36);color:var(--ink);border-radius:14px;padding:10px;font:inherit}
+button{cursor:pointer;text-transform:uppercase;font-weight:800;letter-spacing:.06em}
+button:hover{box-shadow:0 0 24px rgba(103,232,249,.22);transform:translateY(-1px)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.code{white-space:pre-wrap;font-size:12px;line-height:1.5;color:#d8fbff}
+.log{height:250px;overflow:auto;font-size:11px;line-height:1.45;border:1px solid rgba(103,232,249,.16);border-radius:16px;padding:10px;background:rgba(0,0,0,.35)}
+.hud{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.tag{font-size:11px;border:1px solid rgba(103,232,249,.18);border-radius:999px;background:rgba(0,0,0,.62);padding:5px 8px}
+.card{border:1px solid rgba(103,232,249,.16);border-radius:16px;padding:12px;margin-bottom:10px;background:rgba(255,255,255,.035);font-size:12px;line-height:1.45}
+.card b{color:var(--mint)}
+.footer{text-align:center;color:#80a6b5;font-size:11px;padding:0 0 18px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<div>
+<h1>3 → 2 → 1</h1>
+<div style="color:var(--mint)">autonomy closure · no output observed = no trust assigned</div>
+</div>
+<div class="sub">
+no-reply counter ≠ witness<br/>
+sender + receiver + independent witness<br/>
+3 signals → 2-sided agreement → 1 trusted event
+</div>
+</header>
+
+<div class="grid">
+<aside class="box">
+<div class="row"><button id="send">1 Send</button><button id="ack">2 Ack</button></div>
+<div class="row"><button id="witnessBtn">3 Witness</button><button id="close">Close</button></div>
+<div class="row"><button id="counter">No-Reply Counter</button><button id="reset">Reset</button></div>
+<input id="message" value="autonomous action request"/>
+
+<div class="code" style="margin-top:18px">RULE:
+A counter alone is not truth.
+
+COUNTER ONLY:
+received maybe
+understood unknown
+verified unknown
+answered unknown
+
+VALID CLOSURE:
+sender emits
+receiver acknowledges
+independent witness confirms
+
+3 → 2 → 1
+
+If no output is observable:
+do not trust autonomy.</div>
+</aside>
+
+<main class="stage">
+<canvas id="canvas"></canvas>
+<div class="hud">
+<div class="tag" id="state">STATE OPEN</div>
+<div class="tag" id="signals">SIGNALS 0/3</div>
+<div class="tag" id="trusted">TRUST NO</div>
+<div class="tag" id="eventId">EVENT --------</div>
+</div>
+</main>
+
+<aside class="box">
+<div class="card"><b>1-body counter:</b> measures activity, not truth. It cannot close autonomy.</div>
+<div class="card"><b>2-body agreement:</b> sender and receiver align, but still need independent witness.</div>
+<div class="card"><b>3-body closure:</b> sender, receiver, and witness compress into one trusted event.</div>
+
+<div class="log" id="log"></div>
+<div class="code" id="packet" style="margin-top:12px"></div>
+</aside>
+</div>
+<div class="footer">Autonomy Closure 3-2-1 v1.0 — counters do not certify reality; witnessed output does.</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id), cv=$("canvas"), ctx=cv.getContext("2d");
+let W=0,H=0,D=1;
+function resize(){const r=cv.getBoundingClientRect();D=Math.max(1,devicePixelRatio||1);W=r.width;H=r.height;cv.width=W*D;cv.height=H*D;ctx.setTransform(D,0,0,D,0,0)}
+new ResizeObserver(resize).observe(cv);resize();
+
+const VM={
+sender:false,receiver:false,witness:false,counterOnly:false,closed:false,cycle:0,event:"--------",log:[],pulses:[],
+hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(16).padStart(8,"0")},
+say(x){this.log.unshift("["+this.cycle+"] "+x);this.log=this.log.slice(0,100)},
+count(){return [this.sender,this.receiver,this.witness].filter(Boolean).length},
+send(){this.cycle++;this.sender=true;this.counterOnly=false;this.say("sender emitted: "+$("message").value);this.pulse("#67e8f9");ui()},
+ack(){this.cycle++;this.receiver=true;this.counterOnly=false;this.say("receiver acknowledged observable output");this.pulse("#86efac");ui()},
+witnessIt(){this.cycle++;this.witness=true;this.counterOnly=false;this.say("independent witness confirmed both sides");this.pulse("#facc15");ui()},
+counter(){this.cycle++;this.counterOnly=true;this.say("NO-REPLY COUNTER: activity observed, trust not granted");this.pulse("#fb7185");ui()},
+close(){
+ this.cycle++;
+ if(this.sender&&this.receiver&&this.witness){
+   this.closed=true;
+   this.event=this.hash(JSON.stringify(this.packet())+Date.now());
+   this.say("3→2→1 closure: trusted event "+this.event);
+ }else{
+   this.closed=false;
+   this.say("closure refused: need 3 signals, not "+this.count());
+ }
+ this.pulse(this.closed?"#86efac":"#fb7185");
+ ui();
+},
+reset(){this.sender=false;this.receiver=false;this.witness=false;this.counterOnly=false;this.closed=false;this.event="--------";this.cycle++;this.say("reset autonomy closure");ui()},
+pulse(c){for(let i=0;i<10;i++)this.pulses.push({a:Math.random()*Math.PI*2,r:40+Math.random()*240,life:120,c})},
+packet(){
+ return {
+  artifact:"autonomy_closure_321",
+  message:$("message").value,
+  sender_emitted:this.sender,
+  receiver_acknowledged:this.receiver,
+  independent_witness:this.witness,
+  no_reply_counter_only:this.counterOnly,
+  trusted:this.closed,
+  event:this.event,
+  law:"no output observed means no trust assigned"
+ }
+}
+};
+
+function text(t,x,y,s=12,a=.8,c="#edfaff"){ctx.save();ctx.globalAlpha=a;ctx.fillStyle=c;ctx.font=s+"px ui-monospace,monospace";ctx.textAlign="center";ctx.fillText(t,x,y);ctx.restore()}
+function line(x1,y1,x2,y2,a=.25,c="#67e8f9"){ctx.save();ctx.globalAlpha=a;ctx.strokeStyle=c;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.restore()}
+function node(label,x,y,on,c){ctx.save();ctx.fillStyle=on?c:"#334155";ctx.shadowColor=on?c:"transparent";ctx.shadowBlur=18;ctx.beginPath();ctx.arc(x,y,on?18:12,0,Math.PI*2);ctx.fill();ctx.restore();text(label,x,y-28,12,on?.9:.45,on?c:"#94a3b8")}
+function draw(){
+ ctx.clearRect(0,0,W,H);
+ const cx=W/2,cy=H/2;
+ ctx.save();ctx.strokeStyle=VM.closed?"#86efac":"#67e8f9";
+ for(let i=0;i<12;i++){ctx.globalAlpha=.04+i*.006;ctx.beginPath();ctx.ellipse(cx,cy,120+i*34,60+i*16,VM.cycle*.003+i*.04,0,Math.PI*2);ctx.stroke()}
+ ctx.restore();
+
+ const S=[cx-210,cy+90], R=[cx+210,cy+90], WIT=[cx,cy-170], ONE=[cx,cy];
+ line(S[0],S[1],R[0],R[1],.25,"#67e8f9");
+ line(S[0],S[1],WIT[0],WIT[1],.25,"#facc15");
+ line(R[0],R[1],WIT[0],WIT[1],.25,"#86efac");
+ line(WIT[0],WIT[1],ONE[0],ONE[1],.18,"#ffffff");
+ line(S[0],S[1],ONE[0],ONE[1],.15,"#67e8f9");
+ line(R[0],R[1],ONE[0],ONE[1],.15,"#86efac");
+
+ node("SENDER",S[0],S[1],VM.sender,"#67e8f9");
+ node("RECEIVER",R[0],R[1],VM.receiver,"#86efac");
+ node("WITNESS",WIT[0],WIT[1],VM.witness,"#facc15");
+
+ ctx.save();ctx.fillStyle=VM.closed?"#86efac":VM.counterOnly?"#fb7185":"#edfaff";ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=34;ctx.beginPath();ctx.arc(ONE[0],ONE[1],VM.closed?28:18,0,Math.PI*2);ctx.fill();ctx.restore();
+ text(VM.closed?"1":"?",ONE[0],ONE[1]+7,26,.9,"#000");
+ text("3 signals → 2-sided agreement → 1 trusted event",cx,36,14,.75,"#86efac");
+ text(VM.counterOnly?"COUNTER IS NOT CLOSURE":VM.closed?"TRUSTED EVENT":"WAITING FOR 3",cx,H-42,18,.8,VM.counterOnly?"#fb7185":VM.closed?"#86efac":"#facc15");
+
+ VM.pulses.forEach(p=>{p.life--;p.a+=.012;const x=cx+Math.cos(p.a)*p.r,y=cy+Math.sin(p.a)*p.r*.55;ctx.save();ctx.globalAlpha=Math.max(0,p.life/120);ctx.fillStyle=p.c;ctx.shadowColor=p.c;ctx.shadowBlur=12;ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fill();ctx.restore()});
+ VM.pulses=VM.pulses.filter(p=>p.life>0);
+ requestAnimationFrame(draw);
+}
+function ui(){
+ $("state").textContent="STATE "+(VM.closed?"CLOSED":VM.counterOnly?"COUNTER_ONLY":"OPEN");
+ $("signals").textContent="SIGNALS "+VM.count()+"/3";
+ $("trusted").textContent="TRUST "+(VM.closed?"YES":"NO");
+ $("eventId").textContent="EVENT "+VM.event;
+ $("log").innerHTML=VM.log.map(x=>"<div>"+x+"</div>").join("");
+ $("packet").textContent=JSON.stringify(VM.packet(),null,2);
+}
+$("send").onclick=()=>VM.send();
+$("ack").onclick=()=>VM.ack();
+$("witnessBtn").onclick=()=>VM.witnessIt();
+$("counter").onclick=()=>VM.counter();
+$("close").onclick=()=>VM.close();
+$("reset").onclick=()=>VM.reset();
+VM.say("autonomy closure system online");
+ui();draw();
+</script>
+</body>
+</html>
